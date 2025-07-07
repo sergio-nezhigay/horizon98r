@@ -80,6 +80,7 @@
     --media-radius: {{ block.settings.media_radius }}px;
     --image-gap: {{ block.settings.image_gap }}px;
   "
+  data-selected-variant-title="{{ selected_product.selected_or_first_available_variant.title | escape }}"
   {{ block.shopify_attributes }}
 >
   {% if sorted_media.size > 0 %}
@@ -216,6 +217,18 @@
         }
       }
     });
+
+
+  const section = document.querySelector('.product-details');
+
+  section.addEventListener('variant:update', function(event) {
+    const variantData = event.detail;
+    const titleElement = document.querySelector('[data-selected-variant-title]');
+    if (variantData?.resource?.title) {
+      titleElement.setAttribute('data-selected-variant-title', variantData.resource.title);
+    }
+  });
+
   });
 </script>
 
