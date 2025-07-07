@@ -1,12 +1,5 @@
 {% # import schema from '../schemas/blocks/_product-media-gallery.js' %}
 
-{%- if block.settings.zoom -%}
-  <script
-    src="{{ 'zoom-dialog.js' | asset_url }}"
-    type="module"
-  ></script>
-{%- endif -%}
-
 {%- liquid
   assign selected_product = closest.product
   assign selected_variant_media = selected_product.selected_or_first_available_variant.featured_media
@@ -16,70 +9,6 @@
     assign variant_images = product.images | where: 'attached_to_variant?', true | map: 'src'
   endif
 
-  if block.settings.slideshow_controls_style == 'thumbnails'
-    assign controls_on_media = false
-  else
-    assign controls_on_media = true
-  endif
-
-  assign render_slideshow_controls = false
-
-  if block.settings.media_presentation == 'carousel' or block.settings.slideshow_controls_style == block.settings.slideshow_mobile_controls_style
-    assign render_slideshow_controls = true
-  endif
-
-  assign render_mobile_slideshow_controls = false
-
-  if block.settings.slideshow_controls_style != block.settings.slideshow_mobile_controls_style
-    assign slideshow_controls_class = 'mobile:hidden'
-
-    if block.settings.slideshow_mobile_controls_style != 'hint'
-      assign render_mobile_slideshow_controls = true
-    endif
-  endif
-
-  assign slideshow_controls_style = block.settings.slideshow_controls_style
-  # Use a counter instead of dots when there are many images to avoid cropping/overflow.
-  if slideshow_controls_style == 'dots' and selected_product.media.size > 15
-    assign slideshow_controls_style = 'counter'
-  endif
-
-  assign render_slideshow_arrows = false
-
-  if selected_product.media.size <= 1
-    assign slideshow_class = 'product-media-gallery__slideshow--single-media slideshow--single-media'
-  else
-    assign slideshow_class = ''
-
-    if block.settings.media_presentation == 'carousel'
-      assign render_slideshow_arrows = true
-    endif
-  endif
-
-  if slideshow_controls_style == 'thumbnails'
-    assign pagination_position = block.settings.thumbnail_position
-  else
-    assign pagination_position = 'center'
-  endif
-
-  # correct discrepancy between position settings for thumbnails and other controls
-  if pagination_position == 'bottom'
-    assign pagination_position = 'center'
-  endif
-
-  assign icons_position = 'center'
-
-  # Put the icons on the opposite side of the pagination controls
-  if block.settings.slideshow_controls_position == 'on_media'
-    if pagination_position == 'left'
-      assign icons_position = 'right'
-    elsif pagination_position == 'right'
-      assign icons_position = 'left'
-    endif
-  endif
--%}
-
-{%- liquid
   assign sorted_media = '' | split: ','
   if selected_variant_media
     assign sorted_media = sorted_media | concat: selected_product.media | where: 'id', selected_variant_media.id
@@ -97,14 +26,33 @@
   else
     assign sorted_media = selected_product.media
   endif
-  assign has_image_drop = sorted_media | has: 'media_type', 'image'
+
+  assign render_slideshow_controls = false
+  if block.settings.slideshow_controls_style == 'thumbnails'
+    assign controls_on_media = false
+    assign render_slideshow_controls = true
+  else
+    assign controls_on_media = true
+    if sorted_media.size > 1
+      assign render_slideshow_controls = true
+    endif
+  endif
+
+  assign slideshow_controls_style = block.settings.slideshow_controls_style
+  if slideshow_controls_style == 'dots' and sorted_media.size > 15
+    assign slideshow_controls_style = 'counter'
+  endif
+
+  if slideshow_controls_style == 'thumbnails'
+    assign pagination_position = block.settings.thumbnail_position
+  else
+    assign pagination_position = 'center'
+  endif
+
+  if pagination_position == 'bottom'
+    assign pagination_position = 'center'
+  endif
 -%}
-{%- if has_image_drop -%}
-  <script
-    src="{{ 'drag-zoom-wrapper.js' | asset_url }}"
-    type="module"
-  ></script>
-{%- endif -%}
 
 {% style %}
   {% unless block.settings.aspect_ratio == 'adapt' %}
@@ -113,390 +61,280 @@
     }
   {% endunless %}
 {% endstyle %}
-<p>test</p>
-<media-gallery
+
+<!-- Swiper CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+
+<div
   class="
     spacing-style
     sticky-content
-    {% if block.settings.media_presentation == 'grid' %}
-      media-gallery--{{ block.settings.media_columns }}-column
-      {% if block.settings.media_columns == "two" and block.settings.large_first_image%}media-gallery--large-first-image{% endif %}
-    {% endif %}
-    media-gallery--{{ block.settings.media_presentation }}
-    {% if block.settings.slideshow_mobile_controls_style == 'hint' %}
-      media-gallery--hint
-    {% endif %}
+    swiper-gallery
     {% if block.settings.extend_media %}
       media-gallery--extend
     {% endif %}
   "
-  style="{% render 'spacing-style', settings: block.settings %} --thumbnail-width: {{ block.settings.thumbnail_width }}px; --media-radius: {{ block.settings.media_radius }}px;{% if block.settings.icons_style contains 'large' %} --slideshow-icon-padding: 0;{% endif %}--image-gap: {{ block.settings.image_gap }}px;"
-  data-presentation="{{ block.settings.media_presentation }}"
+  style="
+    {% render 'spacing-style', settings: block.settings %}
+    --thumbnail-width: {{ block.settings.thumbnail_width }}px;
+    --media-radius: {{ block.settings.media_radius }}px;
+    --image-gap: {{ block.settings.image_gap }}px;
+  "
   {{ block.shopify_attributes }}
 >
-  {% capture slides %}
-    {% for media in sorted_media %}
-      {% capture children %}
-        {%- render 'product-media', media: media -%}
-      {% endcapture %}
-      {% capture class %}
-        product-media-container product-media-container--{{ media.media_type }}{% if block.settings.constrain_to_viewport %} constrain-height{% endif %}{% if block.settings.aspect_ratio != 'adapt' %} media-fit{% endif %}{% if block.settings.zoom %} product-media-container--zoomable{% endif %}
-      {% endcapture %}
-      {% if block.settings.aspect_ratio == 'adapt' %}
-        {% capture style %}
-          --media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};
-        {% endcapture %}
-      {% endif %}
-      {% if block.settings.zoom and media.media_type == 'model' %}
-        {%- capture attributes -%}"{% if settings.transition_to_main_product and forloop.first %} data-view-transition-type="product-image-transition"{% endif %}{% endcapture -%}
-      {% elsif block.settings.zoom %}
-        {%- capture attributes -%}on:click="#zoom-dialog-{{ block.id }}/open/{{ forloop.index0 }}"{% if settings.transition_to_main_product and forloop.first %} data-view-transition-type="product-image-transition"{% endif %}{% endcapture -%}
-      {% endif %}
-
-      {% render 'slideshow-slide',
-        index: forloop.index,
-        children: children,
-        class: class,
-        style: style,
-        attributes: attributes,
-      %}
-    {% endfor %}
-  {% endcapture %}
-
-  {% if sorted_media.size > 1 %}
-    {% capture controls %}
-      {% if render_slideshow_controls %}
-        {%- render 'slideshow-controls',
-          class: slideshow_controls_class,
-          style: slideshow_controls_style,
-          item_count: sorted_media.size,
-          thumbnails: sorted_media,
-          controls_on_media: controls_on_media,
-          pagination_position: pagination_position,
-          aspect_ratio: block.settings.aspect_ratio
-        -%}
-      {% endif %}
-
-      {% if render_mobile_slideshow_controls %}
-        {%- render 'slideshow-controls',
-          class: 'desktop:hidden media-gallery__mobile-controls',
-          style: block.settings.slideshow_mobile_controls_style,
-          item_count: sorted_media.size,
-          controls_on_media: true,
-          pagination_position: 'center',
-        -%}
-      {% endif %}
-    {% endcapture %}
-  {% endif %}
-
-  {% if render_slideshow_arrows %}
-    {% capture slideshow_arrows %}
-      {% render 'slideshow-arrows', class: 'mobile:hidden', icon_style: block.settings.icons_style, icon_shape: settings.icons_shape %}
-    {% endcapture %}
-  {% endif %}
-
-  {% render 'slideshow',
-    ref: 'slideshow',
-    class: slideshow_class,
-    slides: slides,
-    slide_count: sorted_media.size,
-    slideshow_arrows: slideshow_arrows,
-    arrows_position: icons_position,
-    controls: controls
-  %}
-
-  {% if block.settings.media_presentation == 'grid' %}
-    <ul
-      class="media-gallery__grid list-unstyled"
-      data-testid="media-gallery-grid"
-    >
-      {% for media in sorted_media %}
-        <li
-          ref="media[]"
-          class="
-            product-media-container
-            product-media-container--{{ media.media_type }}
-            {%- if block.settings.constrain_to_viewport %} constrain-height{% endif %}
-            {%- if block.settings.aspect_ratio != 'adapt' %} media-fit{% endif %}
-          "
-          style="{% if block.settings.aspect_ratio == 'adapt' %} --media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};{% endif %}"
-          {% if settings.transition_to_main_product and forloop.first %}
-            data-view-transition-type="product-image-transition"
-          {% endif %}
-        >
-          {%- if block.settings.zoom and media.media_type == 'image' -%}
-            <button
-              type="button"
-              class="button button-unstyled product-media-container__zoom-button"
-              aria-label="{{ 'actions.zoom' | t }}"
-              on:click="/zoom/{{ forloop.index0 }}"
-            >
-              <span class="visually-hidden">{{ 'actions.open_image_in_full_screen' | t }}</span>
-            </button>
-          {%- endif -%}
-          {%- render 'product-media', media: media -%}
-        </li>
-      {% endfor %}
-    </ul>
-  {% endif %}
-
-  {%- if block.settings.zoom -%}
-    <zoom-dialog
-      ref="zoomDialogComponent"
-      id="zoom-dialog-{{ block.id }}"
-    >
-      <dialog
-        ref="dialog"
-        on:keydown="/handleKeyDown"
-        scroll-lock
-      >
-        <button
-          type="button"
-          class="button button-unstyled close-button dialog-zoomed-gallery__close-button"
-          aria-label="{{ 'actions.close' | t }}"
-          on:click="/close"
-        >
-          <span class="visually-hidden">{{ 'actions.close' | t }}</span>
-          {{ 'icon-close.svg' | inline_asset_content }}
-        </button>
-        <div class="dialog-thumbnails-list-container">
-          <scroll-hint
-            class="dialog-thumbnails-list list-unstyled"
-            ref="thumbnails"
-          >
-            {% if sorted_media.size > 1 %}
-              {%- for media in sorted_media -%}
-                {% liquid
-                  assign aspect_ratio = block.settings.aspect_ratio
-                  if block.settings.aspect_ratio == 'adapt'
-                    assign aspect_ratio = media.preview_image.aspect_ratio | default: 1.0
-                  endif
-                %}
-                <button
-                  type="button"
-                  class="button button-unstyled dialog-thumbnails-list__thumbnail"
-                  aria-label="{{ 'accessibility.scroll_to' | t: title: media.alt | default: media.media_type }}"
-                  on:click="/handleThumbnailClick/{{ forloop.index0 }}"
-                  on:pointerenter="/handleThumbnailPointerEnter/{{ forloop.index0 }}"
-                  style="--aspect-ratio: {{ aspect_ratio }}; --gallery-aspect-ratio: {{ aspect_ratio }};"
-                  {% if forloop.first %}
-                    aria-selected="true"
-                  {% endif %}
-                >
-                  {{
-                    media.preview_image
-                    | image_url: width: 1024
-                    | image_tag:
-                      loading: 'lazy',
-                      sizes: 'auto, 110, (min-width: 750px) 160',
-                      widths: '300, 375, 450, 525, 600, 675, 750, 768, 850, 900, 1024',
-                      alt: media.alt
-                    | escape
-                  }}
-                </button>
-              {%- endfor -%}
-            {% endif %}
-          </scroll-hint>
-        </div>
-        <ul
-          class="dialog-zoomed-gallery list-unstyled"
-        >
-          {%- for media in sorted_media -%}
-            <li
-              id="product-{{ media.id}}-{{ forloop.index }}"
+  {% if sorted_media.size > 0 %}
+    <!-- Main Swiper -->
+    <div class="swiper main-swiper">
+      <div class="swiper-wrapper">
+        {% for media in sorted_media %}
+          <div class="swiper-slide">
+            <div
               class="
-                product-media-container
-                product-media-container--{{ media.media_type }}
+                product-media-container product-media-container--{{ media.media_type }}
                 {% if block.settings.constrain_to_viewport %} constrain-height{% endif %}
                 {% if block.settings.aspect_ratio != 'adapt' %} media-fit{% endif %}
-                {% if media.media_type == 'image' %} product-media-container--zoomable{% endif %}
               "
-              style="{% if block.settings.aspect_ratio == 'adapt' %} --media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};{% endif %}"
-              ref="media[]"
-              {% if media.media_type == 'image' %}
-                on:click="/close"
+              {% if block.settings.aspect_ratio == 'adapt' %}
+                style="--media-preview-ratio: {{ media.preview_image.aspect_ratio | default: 1.0 }};"
               {% endif %}
             >
-              {% if media.media_type == 'image' %}
-                <drag-zoom-wrapper class="product-media__drag-zoom-wrapper">
-                  {%- render 'product-media', media: media -%}
-                </drag-zoom-wrapper>
-              {% else %}
-                {%- render 'product-media', media: media -%}
-              {% endif %}
-            </li>
-          {%- endfor -%}
-        </ul>
-      </dialog>
-    </zoom-dialog>
-  {%- endif -%}
+              {%-
+                render 'product-media',
+                media: media,
+                preview_image_only: false,
+                loading: 'lazy',
+                sizes: '(min-width: 750px) 50vw, 100vw',
+                widths: '300, 450, 600, 750, 900, 1050, 1200, 1350, 1500, 1650, 1800, 1950, 2000, 2500, 3000, 3500, 4000, 5000',
+                selected_product: selected_product,
+                first_3d_model: forloop.first and media.media_type == 'model'
+              -%}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
 
-  {%- if first_3d_model -%}
-    <link
-      id="ModelViewerStyle"
-      rel="stylesheet"
-      href="https://cdn.shopify.com/shopifycloud/model-viewer-ui/assets/v1.0/model-viewer-ui.css"
-      media="print"
-      onload="this.media='all'"
-    >
-    <script>
-      window.ProductModel = {
-        loadShopifyXR() {
-          Shopify.loadFeatures([
-            {
-              name: 'shopify-xr',
-              version: '1.0',
-              onLoad: this.setupShopifyXR.bind(this),
-            },
-          ]);
+      {% if sorted_media.size > 1 %}
+        <!-- Navigation arrows -->
+        <div class="swiper-button-next"></div>
+        <div class="swiper-button-prev"></div>
+
+        {% if block.settings.slideshow_controls_style == 'dots' %}
+          <!-- Pagination dots -->
+          <div class="swiper-pagination"></div>
+        {% elsif block.settings.slideshow_controls_style == 'counter' %}
+          <!-- Counter -->
+          <div class="swiper-counter">
+            <span class="swiper-counter-current">1</span> /
+            <span class="swiper-counter-total">{{ sorted_media.size }}</span>
+          </div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+    {% if block.settings.slideshow_controls_style == 'thumbnails' and sorted_media.size > 1 %}
+      <!-- Thumbnail Swiper -->
+      <div class="swiper thumbnail-swiper swiper-thumbnails-{{ block.settings.thumbnail_position }}">
+        <div class="swiper-wrapper">
+          {% for media in sorted_media %}
+            <div class="swiper-slide thumbnail-slide">
+              <img
+                src="{{ media.preview_image | image_url: width: 100 }}"
+                alt="{{ media.alt | escape }}"
+                loading="lazy"
+              >
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+  {% else %}
+    <!-- Fallback for products without media -->
+    <div class="swiper main-swiper">
+      <div class="swiper-wrapper">
+        <div class="swiper-slide">
+          <div class="product-media-container placeholder-media-container">
+            <placeholder-image data-type="product" style="--ratio: {{ block.settings.aspect_ratio | default: 1 }}">
+              <svg viewBox="0 0 525 525" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="1" y="1" width="523" height="523" rx="16" stroke="currentColor" stroke-width="2" fill="none"/>
+                <circle cx="262.5" cy="200" r="50" stroke="currentColor" stroke-width="8" fill="none"/>
+                <path d="M262.5 262.5L200 325L325 325L262.5 262.5Z" stroke="currentColor" stroke-width="8" fill="none"/>
+                <path d="M350 200L400 150" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+              </svg>
+            </placeholder-image>
+          </div>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>
+
+<!-- Swiper JS -->
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const thumbnailSwiper = document.querySelector('.thumbnail-swiper') ? new Swiper('.thumbnail-swiper', {
+      spaceBetween: {{ block.settings.image_gap }},
+      slidesPerView: 'auto',
+      freeMode: true,
+      watchSlidesProgress: true,
+      direction: '{{ block.settings.thumbnail_position }}' === 'left' || '{{ block.settings.thumbnail_position }}' === 'right' ? 'vertical' : 'horizontal',
+    }) : null;
+
+    const mainSwiper = new Swiper('.main-swiper', {
+      spaceBetween: {{ block.settings.image_gap }},
+      slidesPerView: 2,
+      breakpoints: {
+        320: {
+          slidesPerView: 1,
         },
-
-        setupShopifyXR(errors) {
-          if (errors) return;
-
-          if (!window.ShopifyXR) {
-            document.addEventListener('shopify_xr_initialized', () => this.setupShopifyXR());
-            return;
+        768: {
+          slidesPerView: 2,
+        }
+      },
+      {% if block.settings.slideshow_controls_style == 'dots' %}
+      pagination: {
+        el: '.swiper-pagination',
+        clickable: true,
+      },
+      {% endif %}
+      navigation: {
+        nextEl: '.swiper-button-next',
+        prevEl: '.swiper-button-prev',
+      },
+      thumbs: thumbnailSwiper ? {
+        swiper: thumbnailSwiper,
+      } : undefined,
+      on: {
+        slideChange: function () {
+          {% if block.settings.slideshow_controls_style == 'counter' %}
+          const current = document.querySelector('.swiper-counter-current');
+          if (current) {
+            current.textContent = this.activeIndex + 1;
           }
-
-          document.querySelectorAll('[id^="ProductModelJSON-"]').forEach((modelJSON) => {
-            window.ShopifyXR.addModels(JSON.parse(modelJSON.textContent));
-            modelJSON.remove();
-          });
-          window.ShopifyXR.setupXRElements();
-        },
-      };
-
-      window.ProductModel.loadShopifyXR();
-    </script>
-  {%- endif -%}
-</media-gallery>
-
-{% stylesheet %}
-  .dialog-zoomed-gallery {
-    cursor: zoom-out;
-  }
-
-  .dialog--preloading {
-    opacity: 0;
-  }
-
-  .product-media__drag-zoom-wrapper {
-    aspect-ratio: inherit;
-    min-height: inherit;
-    min-width: inherit;
-    display: inherit;
-    flex: inherit;
-  }
-
-  @media screen and (max-width: 749px) {
-    .dialog-zoomed-gallery {
-      /* Prevent scroll wheel or swipe scrolling */
-      overscroll-behavior: none;
-      scrollbar-width: none;
-      display: flex;
-      scroll-snap-type: x mandatory;
-      overflow-x: hidden;
-      scroll-behavior: smooth;
-      height: 100%;
-
-      &::-webkit-scrollbar {
-        display: none;
-      }
-    }
-
-    .dialog-zoomed-gallery .product-media-container {
-      flex: 0 0 100%;
-      scroll-snap-align: start;
-      position: relative;
-    }
-
-    .dialog-zoomed-gallery .product-media-container--image .product-media {
-      aspect-ratio: auto;
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-    }
-
-    .dialog-zoomed-gallery .product-media-container--video,
-    .dialog-zoomed-gallery .product-media-container--external_video {
-      align-content: center;
-    }
-
-    .dialog-zoomed-gallery
-      :is(.product-media-container--video, .product-media-container--external_video, .product-media-container--model)
-      .product-media {
-      aspect-ratio: auto;
-      align-items: center;
-      height: 100%;
-
-      .product-media__image {
-        height: 100%;
-      }
-    }
-
-    .product-media__drag-zoom-wrapper {
-      display: flex;
-      aspect-ratio: auto;
-      height: 100%;
-      width: 100%;
-      overflow: scroll;
-      scrollbar-width: none;
-      justify-content: center;
-
-      &::-webkit-scrollbar {
-        display: none;
-      }
-    }
-
-    .product-media__drag-zoom-wrapper .product-media__image {
-      --product-media-fit: contain;
-      overflow: hidden;
-      transform: scale(var(--drag-zoom-scale))
-        translate(var(--drag-zoom-translate-x, 0), var(--drag-zoom-translate-y, 0));
-    }
-
-    .media-gallery--hint {
-      --slideshow-gap: var(--gap-2xs);
-
-      :not(.dialog-zoomed-gallery) > .product-media-container:not(:only-child) {
-        width: 90%;
-
-        .product-media img {
-          object-fit: cover;
+          {% endif %}
         }
       }
-    }
+    });
+  });
+</script>
+
+{% stylesheet %}
+  .swiper-gallery {
+    position: relative;
   }
 
-  .dialog-zoomed-gallery__close-button {
-    border-radius: 50%;
-    color: white;
-    mix-blend-mode: difference;
-    z-index: var(--layer-raised);
+  .main-swiper {
+    width: 100%;
+    margin-bottom: 20px;
   }
 
-  .media-gallery__mobile-controls {
-    grid-area: auto;
-  }
-
-  .dialog-zoomed-gallery .product-media-container--zoomable.product-media-container--image {
-    cursor: zoom-out;
-  }
-
-  .product-media-container--zoomable.product-media-container--image {
-    cursor: zoom-in;
-  }
-
-  .dialog-zoomed-gallery .product-media-container--video deferred-media,
-  .dialog-zoomed-gallery .product-media-container--external_video deferred-media {
+  .thumbnail-swiper {
+    width: 100%;
     height: auto;
-    aspect-ratio: var(--ratio);
   }
 
-  .dialog-zoomed-gallery .product-media-container--model .product-media__image {
-    /* Make the height match the height of the model-viewer */
-    height: 100vh;
+  .swiper-thumbnails-left,
+  .swiper-thumbnails-right {
+    position: absolute;
+    top: 0;
+    width: var(--thumbnail-width);
+    height: 100%;
+  }
+
+  .swiper-thumbnails-left {
+    left: 0;
+  }
+
+  .swiper-thumbnails-right {
+    right: 0;
+  }
+
+  .swiper-thumbnails-left ~ .main-swiper {
+    margin-left: calc(var(--thumbnail-width) + var(--image-gap));
+  }
+
+  .swiper-thumbnails-right ~ .main-swiper {
+    margin-right: calc(var(--thumbnail-width) + var(--image-gap));
+  }
+
+  .thumbnail-slide {
+    width: var(--thumbnail-width) !important;
+    height: var(--thumbnail-width);
+    cursor: pointer;
+    opacity: 0.6;
+    border-radius: var(--media-radius);
+    overflow: hidden;
+  }
+
+  .thumbnail-slide img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .thumbnail-slide.swiper-slide-thumb-active {
+    opacity: 1;
+    border: 2px solid var(--color-foreground);
+  }
+
+  .swiper-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 10;
+  }
+
+  .placeholder-media-container {
+    background-color: rgb(from var(--color-foreground) r g b / 5%);
+    border: 2px dashed rgb(from var(--color-foreground) r g b / 15%);
+    border-radius: var(--media-radius, 8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    aspect-ratio: var(--media-preview-ratio, 1);
+  }
+
+  .placeholder-media-container svg {
+    width: 120px;
+    height: 120px;
+    color: rgb(from var(--color-foreground) r g b / 30%);
+  }
+
+  .product-media-container {
+    scroll-snap-align: start;
+    width: 100%;
+    flex-shrink: 0;
+    border-radius: var(--media-radius);
+    overflow: hidden;
+  }
+
+  /* Swiper navigation styling */
+  .swiper-button-next,
+  .swiper-button-prev {
+    color: var(--color-foreground);
+    background: rgba(255, 255, 255, 0.9);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-top: -20px;
+  }
+
+  .swiper-button-next:after,
+  .swiper-button-prev:after {
+    font-size: 16px;
+    font-weight: bold;
+  }
+
+  .swiper-pagination-bullet {
+    background: var(--color-foreground);
   }
 {% endstylesheet %}
 
@@ -505,168 +343,6 @@
   "name": "t:names.product_media",
   "tag": null,
   "settings": [
-    {
-      "type": "select",
-      "id": "media_presentation",
-      "label": "t:settings.type",
-      "options": [
-        {
-          "value": "grid",
-          "label": "t:options.grid"
-        },
-        {
-          "value": "carousel",
-          "label": "t:options.carousel"
-        }
-      ],
-      "default": "grid",
-      "info": "t:info.carousel_layout_on_mobile"
-    },
-    {
-      "type": "header",
-      "content": "t:content.grid",
-      "visible_if": "{{ block.settings.media_presentation == 'grid' }}"
-    },
-    {
-      "type": "select",
-      "id": "media_columns",
-      "label": "t:settings.columns",
-      "options": [
-        {
-          "value": "one",
-          "label": "t:options.one_number"
-        },
-        {
-          "value": "two",
-          "label": "t:options.two_number"
-        }
-      ],
-      "default": "one",
-      "visible_if": "{{ block.settings.media_presentation == 'grid' }}"
-    },
-    {
-      "type": "range",
-      "id": "image_gap",
-      "label": "t:settings.gap",
-      "min": 0,
-      "max": 100,
-      "unit": "px",
-      "step": 1,
-      "default": 0,
-      "visible_if": "{{ block.settings.media_presentation == 'grid' }}"
-    },
-    {
-      "type": "checkbox",
-      "id": "large_first_image",
-      "label": "t:settings.full_width_first_image",
-      "default": false,
-      "visible_if": "{{ block.settings.media_presentation == 'grid' and block.settings.media_columns == 'two' }}"
-    },
-    {
-      "type": "header",
-      "content": "t:content.carousel"
-    },
-    {
-      "type": "select",
-      "id": "icons_style",
-      "label": "t:settings.icons",
-      "options": [
-        {
-          "value": "arrow",
-          "label": "t:options.arrows"
-        },
-        {
-          "value": "chevron",
-          "label": "t:options.chevrons"
-        },
-        {
-          "value": "arrows_large",
-          "label": "t:options.large_arrows"
-        },
-        {
-          "value": "chevron_large",
-          "label": "t:options.large_chevrons"
-        }
-      ],
-      "default": "arrow",
-      "visible_if": "{{ block.settings.media_presentation == 'carousel' }}"
-    },
-    {
-      "type": "select",
-      "id": "slideshow_controls_style",
-      "label": "t:settings.pagination",
-      "options": [
-        {
-          "value": "dots",
-          "label": "t:options.dots"
-        },
-        {
-          "value": "counter",
-          "label": "t:options.counter"
-        },
-        {
-          "value": "thumbnails",
-          "label": "t:options.thumbnails"
-        }
-      ],
-      "visible_if": "{{ block.settings.media_presentation == 'carousel' }}"
-    },
-    {
-      "type": "select",
-      "id": "slideshow_mobile_controls_style",
-      "label": "t:settings.mobile_pagination",
-      "options": [
-        {
-          "value": "dots",
-          "label": "t:options.dots"
-        },
-        {
-          "value": "counter",
-          "label": "t:options.counter"
-        },
-        {
-          "value": "hint",
-          "label": "t:options.hint"
-        }
-      ]
-    },
-    {
-      "type": "header",
-      "content": "t:content.thumbnails",
-      "visible_if": "{{ block.settings.media_presentation == 'carousel' and block.settings.slideshow_controls_style == 'thumbnails' }}"
-    },
-    {
-      "type": "select",
-      "id": "thumbnail_position",
-      "label": "t:settings.position",
-      "options": [
-        {
-          "value": "left",
-          "label": "t:options.left"
-        },
-        {
-          "value": "bottom",
-          "label": "t:options.bottom"
-        },
-        {
-          "value": "right",
-          "label": "t:options.right"
-        }
-      ],
-      "default": "bottom",
-      "visible_if": "{{ block.settings.media_presentation == 'carousel' and block.settings.slideshow_controls_style == 'thumbnails' }}"
-    },
-    {
-      "type": "range",
-      "id": "thumbnail_width",
-      "label": "t:settings.width",
-      "min": 44,
-      "max": 72,
-      "step": 1,
-      "unit": "px",
-      "default": 64,
-      "visible_if": "{{ block.settings.media_presentation == 'carousel' and block.settings.slideshow_controls_style == 'thumbnails' }}"
-    },
     {
       "type": "header",
       "content": "t:content.media"
@@ -706,11 +382,20 @@
       "default": 4
     },
     {
+      "type": "range",
+      "id": "image_gap",
+      "label": "t:settings.gap",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "unit": "px",
+      "default": 0
+    },
+    {
       "type": "checkbox",
       "id": "extend_media",
       "label": "t:settings.extend_media_to_screen_edge",
-      "default": true,
-      "visible_if": "{{ section.settings.content_width == 'content-center-aligned' }}"
+      "default": true
     },
     {
       "type": "checkbox",
@@ -720,21 +405,63 @@
     },
     {
       "type": "checkbox",
-      "id": "zoom",
-      "label": "t:settings.enable_zoom",
-      "default": true
-    },
-    {
-      "type": "checkbox",
-      "id": "video_loop",
-      "label": "t:settings.enable_video_looping",
-      "default": false
-    },
-    {
-      "type": "checkbox",
       "id": "hide_variants",
       "default": false,
       "label": "t:settings.hide_unselected_variant_media"
+    },
+    {
+      "type": "header",
+      "content": "t:content.carousel"
+    },
+    {
+      "type": "select",
+      "id": "slideshow_controls_style",
+      "label": "t:settings.pagination",
+      "options": [
+        {
+          "value": "dots",
+          "label": "t:options.dots"
+        },
+        {
+          "value": "counter",
+          "label": "t:options.counter"
+        },
+        {
+          "value": "thumbnails",
+          "label": "t:options.thumbnails"
+        }
+      ],
+      "default": "thumbnails"
+    },
+    {
+      "type": "select",
+      "id": "thumbnail_position",
+      "label": "t:settings.thumbnail_position",
+      "options": [
+        {
+          "value": "left",
+          "label": "t:options.left"
+        },
+        {
+          "value": "bottom",
+          "label": "t:options.bottom"
+        },
+        {
+          "value": "right",
+          "label": "t:options.right"
+        }
+      ],
+      "default": "bottom"
+    },
+    {
+      "type": "range",
+      "id": "thumbnail_width",
+      "label": "t:settings.thumbnail_width",
+      "min": 44,
+      "max": 100,
+      "step": 1,
+      "unit": "px",
+      "default": 64
     },
     {
       "type": "header",
