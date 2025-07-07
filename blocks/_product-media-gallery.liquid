@@ -2,40 +2,12 @@
 
 {%- liquid
   assign selected_product = closest.product
-  assign selected_variant_media = selected_product.selected_or_first_available_variant.featured_media
-  assign first_3d_model = selected_product.media | where: 'media_type', 'model' | first
 
   if block.settings.hide_variants
     assign variant_images = product.images | where: 'attached_to_variant?', true | map: 'src'
-  endif
-
-  assign sorted_media = '' | split: ','
-  if selected_variant_media
-    assign sorted_media = sorted_media | concat: selected_product.media | where: 'id', selected_variant_media.id
-
-    for media in selected_product.media
-      if block.settings.hide_variants and variant_images contains media.src and sorted_media.size > 0
-        continue
-      endif
-
-      if media.id != selected_variant_media.id
-        assign found_media = selected_product.media | where: 'id', media.id
-        assign sorted_media = sorted_media | concat: found_media
-      endif
-    endfor
+    assign sorted_media = selected_product.media | reject: 'src', variant_images
   else
     assign sorted_media = selected_product.media
-  endif
-
-  assign render_slideshow_controls = false
-  if block.settings.slideshow_controls_style == 'thumbnails'
-    assign controls_on_media = false
-    assign render_slideshow_controls = true
-  else
-    assign controls_on_media = true
-    if sorted_media.size > 1
-      assign render_slideshow_controls = true
-    endif
   endif
 
   assign slideshow_controls_style = block.settings.slideshow_controls_style
@@ -62,8 +34,7 @@
   {% endunless %}
 {% endstyle %}
 
-<!-- Swiper CSS -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<link rel="stylesheet" href="{{ 'swiper-bundle.min.css' | asset_url }}">
 
 <div
   class="
@@ -141,7 +112,10 @@
               <img
                 src="{{ media.preview_image | image_url: width: 100 }}"
                 alt="{{ media.alt | escape }}"
+                width="100"
+                height="{{ 100 | divided_by: media.preview_image.aspect_ratio | round }}"
                 loading="lazy"
+              >
               >
             </div>
           {% endfor %}
@@ -169,8 +143,7 @@
   {% endif %}
 </div>
 
-<!-- Swiper JS -->
-<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<script src="{{ 'swiper-bundle.min.js' | asset_url }}" defer="defer"></script>
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
@@ -180,13 +153,18 @@
     const allMedia = {{ sorted_media | json }};
 
     function filterMediaByVariant(variantTitle) {
+
+      if (allMedia.length <= 1) return allMedia;
+
       if (!variantTitle) return allMedia;
 
-      return allMedia.filter(media => {
+      const filtered = allMedia.filter(media => {
         const altText = media.alt || '';
         return altText.toLowerCase().includes(variantTitle.toLowerCase()) ||
                !media.alt; // Include media without alt text as fallback
       });
+
+      return filtered.length > 0 ? filtered : allMedia;
     }
 
     function rebuildGallery(filteredMedia) {
@@ -270,13 +248,13 @@
     // Initialize main swiper
     mainSwiper = new Swiper('.main-swiper', {
       spaceBetween: {{ block.settings.image_gap }},
-      slidesPerView: 2,
+      slidesPerView: {{ block.settings.images_per_view | default: 1 }},
       breakpoints: {
         320: {
           slidesPerView: 1,
         },
         768: {
-          slidesPerView: 2,
+          slidesPerView: {{ block.settings.images_per_view | default: 1 }},
         }
       },
       {% if block.settings.slideshow_controls_style == 'dots' %}
@@ -506,6 +484,16 @@
     {
       "type": "header",
       "content": "t:content.carousel"
+    },
+    {
+      "type": "range",
+      "id": "images_per_view",
+      "label": "Images per view",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "default": 1,
+      "info": "Number of images to display at once on desktop"
     },
     {
       "type": "select",
