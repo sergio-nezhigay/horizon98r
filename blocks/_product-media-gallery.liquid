@@ -174,7 +174,92 @@
 
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    const thumbnailSwiper = document.querySelector('.thumbnail-swiper') ? new Swiper('.thumbnail-swiper', {
+    let mainSwiper = null;
+    let thumbnailSwiper = null;
+    const galleryContainer = document.querySelector('.swiper-gallery');
+    const allMedia = {{ sorted_media | json }};
+
+    function filterMediaByVariant(variantTitle) {
+      if (!variantTitle) return allMedia;
+
+      return allMedia.filter(media => {
+        const altText = media.alt || '';
+        return altText.toLowerCase().includes(variantTitle.toLowerCase()) ||
+               !media.alt; // Include media without alt text as fallback
+      });
+    }
+
+    function rebuildGallery(filteredMedia) {
+      const mainWrapper = document.querySelector('.main-swiper .swiper-wrapper');
+      const thumbnailWrapper = document.querySelector('.thumbnail-swiper .swiper-wrapper');
+
+      if (!mainWrapper) return;
+
+      // Clear existing slides
+      mainWrapper.innerHTML = '';
+      if (thumbnailWrapper) thumbnailWrapper.innerHTML = '';
+
+      // Rebuild main slides
+      filteredMedia.forEach((media, index) => {
+        const slideDiv = document.createElement('div');
+        slideDiv.className = 'swiper-slide';
+        slideDiv.innerHTML = `
+          <div class="product-media-container product-media-container--${media.media_type}
+            {% if block.settings.constrain_to_viewport %} constrain-height{% endif %}
+            {% if block.settings.aspect_ratio != 'adapt' %} media-fit{% endif %}"
+            {% if block.settings.aspect_ratio == 'adapt' %}
+              style="--media-preview-ratio: ${media.preview_image?.aspect_ratio || 1.0};"
+            {% endif %}>
+            <img src="${media.preview_image.src}" alt="${media.alt || ''}" loading="lazy">
+          </div>
+        `;
+        mainWrapper.appendChild(slideDiv);
+
+        // Rebuild thumbnail slides if thumbnails exist
+        if (thumbnailWrapper) {
+          const thumbDiv = document.createElement('div');
+          thumbDiv.className = 'swiper-slide thumbnail-slide';
+          thumbDiv.innerHTML = `
+            <img src="${media.preview_image.src}?width=100" alt="${media.alt || ''}" loading="lazy">
+          `;
+          thumbnailWrapper.appendChild(thumbDiv);
+        }
+      });
+
+      // Update counter total if it exists
+      const counterTotal = document.querySelector('.swiper-counter-total');
+      if (counterTotal) {
+        counterTotal.textContent = filteredMedia.length;
+      }
+
+      // Update swiper instances
+      if (mainSwiper) {
+        mainSwiper.update();
+        mainSwiper.slideTo(0, 0);
+      }
+      if (thumbnailSwiper) {
+        thumbnailSwiper.update();
+      }
+    }
+
+    function onVariantUpdate(event) {
+      const variantData = event.detail;
+      const titleElement = document.querySelector('[data-selected-variant-title]');
+
+      if (variantData?.resource?.title) {
+        const variantTitle = variantData.resource.title;
+        titleElement.setAttribute('data-selected-variant-title', variantTitle);
+
+        // Filter and rebuild gallery based on variant title
+        const filteredMedia = filterMediaByVariant(variantTitle);
+        rebuildGallery(filteredMedia);
+      }
+    }
+
+    document.addEventListener('variant:update', onVariantUpdate);
+
+    // Initialize thumbnail swiper first
+    thumbnailSwiper = document.querySelector('.thumbnail-swiper') ? new Swiper('.thumbnail-swiper', {
       spaceBetween: {{ block.settings.image_gap }},
       slidesPerView: 'auto',
       freeMode: true,
@@ -182,7 +267,8 @@
       direction: '{{ block.settings.thumbnail_position }}' === 'left' || '{{ block.settings.thumbnail_position }}' === 'right' ? 'vertical' : 'horizontal',
     }) : null;
 
-    const mainSwiper = new Swiper('.main-swiper', {
+    // Initialize main swiper
+    mainSwiper = new Swiper('.main-swiper', {
       spaceBetween: {{ block.settings.image_gap }},
       slidesPerView: 2,
       breakpoints: {
@@ -218,17 +304,12 @@
       }
     });
 
-
-  const section = document.querySelector('.product-details');
-
-  section.addEventListener('variant:update', function(event) {
-    const variantData = event.detail;
-    const titleElement = document.querySelector('[data-selected-variant-title]');
-    if (variantData?.resource?.title) {
-      titleElement.setAttribute('data-selected-variant-title', variantData.resource.title);
+    // Initial filter based on current variant
+    const initialVariantTitle = galleryContainer.getAttribute('data-selected-variant-title');
+    if (initialVariantTitle) {
+      const filteredMedia = filterMediaByVariant(initialVariantTitle);
+      rebuildGallery(filteredMedia);
     }
-  });
-
   });
 </script>
 
